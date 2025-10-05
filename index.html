@@ -3,565 +3,548 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Neon Sci-Fi Contra — Web Game (GitHub & Blogger Ready)</title>
+<title>3D Hard Corps-style Prototype (Three.js)</title>
 <style>
-  :root{
-    --bg1:#020617; --bg2:#07102a; --panel:rgba(255,255,255,0.04);
-    --neon1:#7afcff; --neon2:#ff52e5; --neon3:#9bff7a;
-  }
-  html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg1),var(--bg2));font-family:Inter,system-ui,Roboto,Arial;}
-  .wrap{max-width:980px;margin:14px auto;padding:12px;color:#dff7ff;}
-  header{display:flex;align-items:center;gap:12px}
-  h1{font-size:18px;margin:0}
-  p.small{margin:6px 0;color:#bfeeff80;font-size:13px}
-  .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.02)); border-radius:12px;padding:12px; box-shadow:0 10px 40px rgba(0,0,0,0.7); display:flex;flex-direction:column;gap:10px}
-  canvas{display:block;border-radius:8px;width:100%;height:auto;background:transparent;touch-action:none}
-  .hud{display:flex;justify-content:space-between;align-items:center}
-  .controls{display:flex;gap:8px}
-  .controlBtn{padding:8px 10px;border-radius:8px;background:var(--panel);border:1px solid rgba(255,255,255,0.04);color:#e6fbff;font-weight:700}
-  .touchRow{display:flex;justify-content:space-between;gap:8px;margin-top:8px}
-  .touchPad{display:flex;gap:6px}
-  .touchBtn{min-width:56px;padding:12px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.04);text-align:center;font-weight:800;color:#fff;user-select:none}
-  .smallMuted{font-size:12px;color:#9fdcff8a}
-  @media (max-width:520px){ h1{font-size:16px} .touchBtn{min-width:44px;padding:10px} }
+  html,body{height:100%;margin:0;background:#071021;color:#dff9ff;font-family:Inter,system-ui,Arial}
+  #ui{position:fixed;left:12px;top:12px;z-index:30}
+  #ui .big{font-weight:800;font-family:monospace}
+  #ui .small{opacity:0.85;font-size:13px;margin-top:6px}
+  #hud {position:fixed;right:12px;top:12px;color:#eafcff;text-align:right;z-index:30}
+  #overlay{position:fixed;left:0;right:0;bottom:12px;display:flex;justify-content:center;gap:8px;z-index:30}
+  .touchBtn{padding:12px 14px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);color:#fff;font-weight:700;user-select:none}
+  canvas{display:block}
+  #message{position:fixed;left:0;right:0;top:45%;text-align:center;color:#fff;font-family:monospace;z-index:40}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <h1>Neon Sci-Fi Contra — Paste to GitHub Pages / Blogger</h1>
-  </header>
-  <p class="small">Smooth neon visuals, animated character, synth sounds, parallax background. Controls: ←/A →/D = move · ↑/W = jump · Space = shoot · R = restart · P = pause · M = mute</p>
-
-  <div class="card">
-    <canvas id="c" width="960" height="540"></canvas>
-
-    <div class="hud">
-      <div>
-        <div id="score" style="font-family:monospace;font-weight:800">Score: 0</div>
-        <div id="lives" class="smallMuted">Lives: 3</div>
-      </div>
-      <div class="controls">
-        <button id="pause" class="controlBtn">Pause</button>
-        <button id="mute" class="controlBtn">Mute</button>
-      </div>
-    </div>
-
-    <div class="touchRow" aria-hidden="false">
-      <div class="touchPad">
-        <div id="tLeft" class="touchBtn">◀</div>
-        <div id="tRight" class="touchBtn">▶</div>
-        <div id="tJump" class="touchBtn">▲</div>
-      </div>
-      <div class="touchPad">
-        <div id="tShoot" class="touchBtn">FIRE</div>
-        <div id="tRestart" class="touchBtn">RESTART</div>
-      </div>
-    </div>
-
-    <div class="smallMuted">Tip: On mobile use touch buttons. For GitHub Pages, paste into <code>index.html</code> of repo and enable Pages.</div>
-  </div>
+<div id="ui">
+  <div class="big" id="score">SCORE: 0</div>
+  <div class="small" id="lives">LIVES: 3</div>
+  <div class="small" id="help">Keys: ←/A →/D = move · W/↑ = jump · Space = shoot · E = dash · R restart · M mute</div>
+</div>
+<div id="hud">
+  <div id="bossHealth" style="font-family:monospace"></div>
 </div>
 
-<script>
-/* Neon Sci-Fi Contra — Single-file game
-   - Procedural "sprite" animation (no external images)
-   - WebAudio synths for shoot/jump/explosion + ambient loop
-   - Parallax neon background, particles, enemies, bullets
-   - GitHub Pages & Blogger compatible (paste into index.html / Blogger HTML)
-*/
+<div id="overlay">
+  <div id="leftPad" class="touchBtn">◀</div>
+  <div id="rightPad" class="touchBtn">▶</div>
+  <div id="jumpPad" class="touchBtn">▲</div>
+  <div id="shootPad" class="touchBtn">FIRE</div>
+  <div id="dashPad" class="touchBtn">DASH</div>
+</div>
 
-// ==== Canvas setup ====
-const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d', { alpha: true });
+<div id="message" style="display:none"></div>
 
-function resizeCanvas(){
-  const maxW = Math.min(window.innerWidth - 40, 960);
-  const maxH = Math.min(window.innerHeight - 160, 640);
-  const aspect = 16/9;
-  let w = maxW, h = Math.round(w / aspect);
-  if (h > maxH) { h = maxH; w = Math.round(h * aspect); }
-  canvas.style.width = w + 'px';
-  canvas.style.height = h + 'px';
-  const ratio = window.devicePixelRatio || 1;
-  canvas.width = Math.round(w * ratio);
-  canvas.height = Math.round(h * ratio);
-  ctx.setTransform(ratio,0,0,ratio,0,0);
-}
-resizeCanvas();
-window.addEventListener('resize', resizeCanvas);
+<!-- Three.js as ES module from CDN -->
+<script type="module">
+// Imports
+import * as THREE from 'https://unpkg.com/three@0.152.2/build/three.module.js';
+import { GLTFLoader } from 'https://unpkg.com/three@0.152.2/examples/jsm/loaders/GLTFLoader.js';
+import { OrbitControls } from 'https://unpkg.com/three@0.152.2/examples/jsm/controls/OrbitControls.js';
 
-// UI refs
-const scoreEl = document.getElementById('score');
-const livesEl = document.getElementById('lives');
-const pauseBtn = document.getElementById('pause');
-const muteBtn = document.getElementById('mute');
+// ----------------- Basic renderer & scene -----------------
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x071021, 0.0012);
 
-// Touch refs
-const tLeft = document.getElementById('tLeft');
-const tRight = document.getElementById('tRight');
-const tJump = document.getElementById('tJump');
-const tShoot = document.getElementById('tShoot');
-const tRestart = document.getElementById('tRestart');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio || 1);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
 
-// ==== Audio ====
-const AudioCtx = window.AudioContext || window.webkitAudioContext;
-let audioCtx = null;
-let muted = false;
-let ambientNode = null;
+// Camera: side/behind to create 3D side-scroller feel
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.1, 5000);
+camera.position.set(0, 60, 120);
+camera.lookAt(0, 40, 0);
 
-function ensureAudio(){
-  if (!audioCtx) audioCtx = new AudioCtx();
-}
-function playSynth({freq=440,type='sawtooth',dur=0.12,vol=0.08,attack=0.01,decay=0.12}){
-  if (muted) return;
-  ensureAudio();
-  const o = audioCtx.createOscillator();
-  const g = audioCtx.createGain();
-  o.type = type; o.frequency.value = freq;
-  g.gain.value = 0;
-  o.connect(g); g.connect(audioCtx.destination);
-  const t = audioCtx.currentTime;
-  g.gain.linearRampToValueAtTime(vol, t + attack);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + dur + decay);
-  o.start(t); o.stop(t + dur + decay + 0.02);
-}
-function playNoiseBurst({duration=0.2,vol=0.4}){
-  if (muted) return;
-  ensureAudio();
-  const bufferSize = audioCtx.sampleRate * duration;
-  const buf = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-  const data = buf.getChannelData(0);
-  for (let i=0;i<bufferSize;i++) data[i] = (Math.random()*2-1) * Math.pow(1 - i/bufferSize, 3);
-  const src = audioCtx.createBufferSource();
-  const g = audioCtx.createGain();
-  src.buffer = buf; src.connect(g); g.connect(audioCtx.destination);
-  g.gain.value = vol;
-  src.start();
-}
-function startAmbient(){
-  if (muted) return;
-  ensureAudio();
-  if (ambientNode) ambientNode.stop();
-  const t = audioCtx.currentTime;
-  const o1 = audioCtx.createOscillator();
-  const o2 = audioCtx.createOscillator();
-  const g = audioCtx.createGain();
-  o1.type = 'sawtooth'; o2.type = 'sine';
-  o1.frequency.value = 55; o2.frequency.value = 110;
-  o1.connect(g); o2.connect(g); g.connect(audioCtx.destination);
-  g.gain.value = 0.02;
-  o1.start(t); o2.start(t);
-  ambientNode = { stop: ()=>{ o1.stop(); o2.stop(); ambientNode = null; } };
-}
-function stopAmbient(){
-  if (ambientNode) ambientNode.stop();
-  ambientNode = null;
-}
-
-// ==== Input ====
-const keys = {};
-window.addEventListener('keydown', (e)=>{
-  keys[e.code] = true;
-  if (e.code === 'Space') e.preventDefault();
-  if (e.code === 'KeyR') restart();
-  if (e.code === 'KeyP') togglePause();
-  if (e.code === 'KeyM') toggleMute();
+// Resize
+window.addEventListener('resize', ()=>{
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
 });
-window.addEventListener('keyup', (e)=>{ keys[e.code] = false; });
 
-// Touch buttons
-tLeft.addEventListener('touchstart', (e)=>{ e.preventDefault(); keys['ArrowLeft']=true; });
-tLeft.addEventListener('touchend', (e)=>{ e.preventDefault(); keys['ArrowLeft']=false; });
-tRight.addEventListener('touchstart', (e)=>{ e.preventDefault(); keys['ArrowRight']=true; });
-tRight.addEventListener('touchend', (e)=>{ e.preventDefault(); keys['ArrowRight']=false; });
-tJump.addEventListener('touchstart', (e)=>{ e.preventDefault(); keys['ArrowUp']=true; setTimeout(()=>keys['ArrowUp']=false,220); playSynth({freq:820, type:'sine', dur:0.09, vol:0.06}); });
-tShoot.addEventListener('touchstart', (e)=>{ e.preventDefault(); keys['Space']=true; setTimeout(()=>keys['Space']=false,160); playShoot(); });
-tRestart.addEventListener('touchstart', (e)=>{ e.preventDefault(); restart(); });
+// ----------------- Lighting -----------------
+const ambient = new THREE.AmbientLight(0xffffff, 0.35);
+scene.add(ambient);
+const dir = new THREE.DirectionalLight(0xffffff, 1.0);
+dir.position.set(200,300,200);
+dir.castShadow = true;
+dir.shadow.mapSize.set(2048,2048);
+dir.shadow.camera.left=-200; dir.shadow.camera.right=200; dir.shadow.camera.top=200; dir.shadow.camera.bottom=-200;
+scene.add(dir);
 
-// UI btns
-pauseBtn.addEventListener('click', ()=>{ togglePause(); });
-muteBtn.addEventListener('click', ()=>{ toggleMute(); });
+// subtle rim neon lights
+const neon1 = new THREE.PointLight(0x7afcff, 0.6, 300);
+neon1.position.set(-100, 80, 60);
+scene.add(neon1);
+const neon2 = new THREE.PointLight(0xff52e5, 0.55, 300);
+neon2.position.set(400, 120, -80);
+scene.add(neon2);
 
-// ==== Game state ====
-let running = true;
-let score = 0;
-let lives = 3;
+// ----------------- Ground + environment (simple modular geometry) -----------------
+const groundGeo = new THREE.PlaneGeometry(4000, 4000);
+const groundMat = new THREE.MeshStandardMaterial({ color: 0x06121a, roughness: 0.9, metalness: 0.1 });
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI/2;
+ground.position.y = 0;
+ground.receiveShadow = true;
+scene.add(ground);
 
-const world = { width: 4200, height: 480, gravity: 0.28, platforms: [] };
-function makeLevel(){
-  world.platforms = [{x:0,y:360,w:world.width,h:120}];
-  for (let i=0;i<24;i++){
-    const w = 90 + Math.random()*220;
-    const x = 240 + i*150 + Math.random()*120;
-    const y = 210 + Math.sin(i*0.55)*60 + Math.random()*30;
-    world.platforms.push({x,y,w,h:12});
-  }
+// add neon platforms as boxes
+const platforms = [];
+function createPlatform(x,z,w,h,y=12){
+  const mat = new THREE.MeshStandardMaterial({ color: 0x0b2130, emissive: 0x082632, roughness:0.7 });
+  const geom = new THREE.BoxGeometry(w, h, 60);
+  const m = new THREE.Mesh(geom, mat);
+  m.position.set(x, y, z);
+  m.receiveShadow = true;
+  m.castShadow = false;
+  scene.add(m);
+  platforms.push(m);
+  // neon rim
+  const rim = new THREE.Mesh(new THREE.BoxGeometry(w*0.95, h*0.3, 62), new THREE.MeshBasicMaterial({ color: 0x7afcff, transparent:true, opacity:0.06 }));
+  rim.position.set(x, y + h/2 + 0.5, z);
+  scene.add(rim);
 }
-makeLevel();
+for(let i=0;i<36;i++){
+  createPlatform(100 + i*140, (i%2? -20:20), 120 + (Math.random()*80|0), 6, 30 + Math.sin(i*0.6)*18);
+}
 
-const player = {
-  x: 80, y: 260, w: 28, h: 36, vx:0, vy:0, speed:2.6, jump:-7.2, onGround:false, cooldown:0, facing:1, anim:0, frame:0
+// ----------------- Player (procedural low-poly 'model' to start) -----------------
+const player = new THREE.Group();
+player.position.set(60, 40, 0);
+player.castShadow = true;
+player.receiveShadow = true;
+scene.add(player);
+
+// body
+const bodyMat = new THREE.MeshStandardMaterial({ color:0xffd66b, roughness:0.5, metalness:0.1, emissive:0x000000 });
+const bodyGeo = new THREE.BoxGeometry(10, 16, 8);
+const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
+bodyMesh.position.set(0, 0, 0);
+bodyMesh.castShadow = true;
+player.add(bodyMesh);
+
+// head visor
+const visor = new THREE.Mesh(new THREE.BoxGeometry(8,4,6), new THREE.MeshStandardMaterial({ color:0x7afcff, emissive:0x2eefff, emissiveIntensity:0.9 }));
+visor.position.set(0, 10, 0);
+player.add(visor);
+
+// gun (simple)
+const gun = new THREE.Mesh(new THREE.BoxGeometry(8,3,4), new THREE.MeshStandardMaterial({ color:0x071018 }));
+gun.position.set(10, 0, 0);
+player.add(gun);
+
+// physics + state
+const state = {
+  vx:0, vy:0, speed: 1.6, runMultiplier: 1.8, onGround:false,
+  jumpPower: 9.8, canDoubleJump:true, cooldown:0, facing:1,
+  dashCool:0, dashing:false, dashTime:0
 };
-let cameraX = 0;
-const bullets = [];
-const enemies = [];
+let score = 0, lives = 3;
+document.getElementById('score').textContent = 'SCORE: ' + score;
+document.getElementById('lives').textContent = 'LIVES: ' + lives;
+
+// ----------------- Enemies & bullets -----------------
+const enemies = []; // {mesh, vx, hp, type}
+const bullets = []; // player bullets
+const eBullets = []; // enemy bullets
 const particles = [];
 
-// spawn initial enemies
-for (let i=0;i<6;i++) spawnEnemy(460 + i*260, Math.random()<0.58?'walker':'shooter');
+// simple enemy factory
+function spawnEnemy(x,y,type='walker'){
+  const mat = new THREE.MeshStandardMaterial({ color: type==='shooter' ? 0x9bff7a : 0xff6b95, roughness:0.6 });
+  const geom = new THREE.BoxGeometry(10,14,8);
+  const m = new THREE.Mesh(geom, mat);
+  m.position.set(x, y, (Math.random()*20 - 10));
+  m.castShadow = true;
+  scene.add(m);
+  const obj = { mesh: m, vx: type==='walker' ? (-0.6 - Math.random()*0.6) : 0, hp: 1 + (Math.random()>0.75?1:0), type, cooldown:80 + Math.random()*120 };
+  enemies.push(obj);
+}
+for(let i=0;i<6;i++) spawnEnemy(360 + i*220, 40, Math.random()<0.6 ? 'walker' : 'shooter');
 
-function spawnEnemy(x, type='walker'){
-  const e = { x, y: type==='walker'?300:240, w:28, h:34, vx: type==='walker' ? (-0.6 - Math.random()*0.8) : 0, type, cooldown: 60 + Math.random()*80, hp: 1 + Math.floor(Math.random()*2) };
-  enemies.push(e);
+// boss (simple)
+let boss = null;
+function spawnBoss(){
+  const mat = new THREE.MeshStandardMaterial({ color:0xff5ad6, emissive: 0xff5ad6, emissiveIntensity: 0.08 });
+  const geom = new THREE.BoxGeometry(80,60,40);
+  const m = new THREE.Mesh(geom, mat);
+  m.position.set(2200, 110, 0);
+  m.castShadow = true;
+  scene.add(m);
+  boss = { mesh:m, hp: 60, phase:0, timer:0 };
+}
+spawnBoss();
+
+// ----------------- Simple collision helpers -----------------
+function aabb(mesh){
+  const b = new THREE.Box3().setFromObject(mesh);
+  return b;
 }
 
-// ==== Gameplay functions ====
-function togglePause(){ running = !running; pauseBtn.textContent = running ? 'Pause' : 'Resume'; if (running && audioCtx && audioCtx.state==='suspended') audioCtx.resume(); }
-function toggleMute(){ muted = !muted; muteBtn.textContent = muted ? 'Unmute' : 'Mute'; if (muted) stopAmbient(); else startAmbient(); }
-
-function playShoot(){ playSynth({freq:1400, type:'square', dur:0.06, vol:0.07}); }
-function playHit(){ playSynth({freq:240, type:'sawtooth', dur:0.12, vol:0.08}); }
-function playExplosion(){ playNoiseBurst({duration:0.25, vol:0.35}); playSynth({freq:180, type:'sine', dur:0.18, vol:0.06}); }
-
-function damagePlayer(){
-  lives -= 1; livesEl.textContent = 'Lives: ' + lives;
-  playHit();
-  spawnBurst(player.x + player.w/2, player.y + player.h/2, 20, '#ff6ad5');
-  if (lives <= 0){ running = false; setTimeout(()=>{}, 10); }
-  else { player.x = Math.max(60, cameraX + 60); player.y = 160; player.vx = 0; player.vy = 0; }
+// ----------------- Camera follow (side scroll feel) -----------------
+function updateCamera(){
+  // keep player slightly left of center
+  const targetX = Math.max(0, player.position.x + 20);
+  // camera will follow on x axis; slight z/height offset
+  camera.position.x += (targetX - camera.position.x) * 0.08;
+  camera.position.y += ((player.position.y + 40) - camera.position.y) * 0.06;
+  camera.lookAt(player.position.x + 40, player.position.y + 10, 0);
 }
 
-function restart(){
-  score = 0; lives = 3; running = true;
-  player.x = 80; player.y = 260; player.vx = 0; player.vy = 0;
-  bullets.length = 0; enemies.length = 0; particles.length = 0;
-  makeLevel();
-  for (let i=0;i<6;i++) spawnEnemy(460 + i*260, Math.random()<0.58?'walker':'shooter');
-  scoreEl.textContent = score;
-  score = 0; scoreEl.textContent = 'Score: ' + score;
-  livesEl.textContent = 'Lives: ' + lives;
-  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-}
+// ----------------- Input handling -----------------
+const keys = {};
+window.addEventListener('keydown', e => { keys[e.code] = true; if (e.code === 'Space') e.preventDefault(); if (e.code==='KeyR') restart(); if (e.code==='KeyM') toggleMute(); });
+window.addEventListener('keyup', e => keys[e.code] = false);
 
-// ==== Particles ====
-function spawnBurst(x,y,count=12,color='#9bff7a'){
-  for (let i=0;i<count;i++){
-    particles.push({
-      x, y,
-      vx: (Math.random()*2-1)*3,
-      vy: (Math.random()*-1.8-0.6),
-      life: 30 + Math.random()*30,
-      color, size: 2 + Math.random()*3
-    });
-  }
-  playExplosion();
-}
+// touch UI mapping
+document.getElementById('leftPad').addEventListener('touchstart', e=>{ e.preventDefault(); keys['ArrowLeft']=true; });
+document.getElementById('leftPad').addEventListener('touchend', e=>{ e.preventDefault(); keys['ArrowLeft']=false; });
+document.getElementById('rightPad').addEventListener('touchstart', e=>{ e.preventDefault(); keys['ArrowRight']=true; });
+document.getElementById('rightPad').addEventListener('touchend', e=>{ e.preventDefault(); keys['ArrowRight']=false; });
+document.getElementById('jumpPad').addEventListener('touchstart', e=>{ e.preventDefault(); keys['ArrowUp']=true; setTimeout(()=>keys['ArrowUp']=false, 200); });
+document.getElementById('shootPad').addEventListener('touchstart', e=>{ e.preventDefault(); keys['Space']=true; setTimeout(()=>keys['Space']=false, 120); });
+document.getElementById('dashPad').addEventListener('touchstart', e=>{ e.preventDefault(); keys['KeyE']=true; setTimeout(()=>keys['KeyE']=false, 220); });
 
-// ==== Update & Render Loop ====
-let last = performance.now();
-function loop(now){
-  const dt = Math.min(1/30, (now - last)/1000);
-  last = now;
-  if (running) update(dt);
-  render();
-  requestAnimationFrame(loop);
+// ----------------- Audio (simple WebAudio FX, can be replaced) -----------------
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null, muted = false;
+function ensureAudio(){ if (!audioCtx) audioCtx = new AudioCtx(); }
+function playBeep(freq=600, type='sine', dur=0.08, vol=0.06){
+  if (muted) return; ensureAudio();
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.type = type; o.frequency.value = freq; o.connect(g); g.connect(audioCtx.destination);
+  g.gain.setValueAtTime(vol, audioCtx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
+  o.start(); o.stop(audioCtx.currentTime + dur + 0.02);
 }
-requestAnimationFrame(loop);
+function playShootSfx(){ playBeep(1200,'square',0.05,0.08); }
+function playHitSfx(){ playBeep(240,'sawtooth',0.12,0.08); }
+function playExplosionSfx(){ if (muted) return; ensureAudio(); const buf = audioCtx.createBuffer(1, audioCtx.sampleRate*0.18, audioCtx.sampleRate); const d = buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i] = (Math.random()*2-1)*Math.exp(-3*i/d.length); const s = audioCtx.createBufferSource(), g = audioCtx.createGain(); s.buffer = buf; s.connect(g); g.connect(audioCtx.destination); g.gain.value = 0.25; s.start(); }
 
+// ----------------- Gameplay: update physics, enemies, bullets -----------------
+const GRAV = 0.6;
 function update(dt){
-  // resume audio on first user gesture requirement handled later
+  // Player movement
+  const move = (keys['ArrowRight']||keys['KeyD']?1:0) - (keys['ArrowLeft']||keys['KeyA']?1:0);
+  const running = keys['ShiftLeft'] || keys['ShiftRight'];
+  const speed = state.speed * (running ? state.runMultiplier : 1);
+  state.vx = move * speed;
+  if (move !== 0) state.facing = move > 0 ? 1 : -1;
 
-  // input
-  let move = 0;
-  if (keys['ArrowLeft'] || keys['KeyA']) move -= 1;
-  if (keys['ArrowRight'] || keys['KeyD']) move += 1;
-  player.vx = move * player.speed * (1 + score/3000);
-  if (move !== 0) player.facing = move > 0 ? 1 : -1;
-
-  if ((keys['ArrowUp'] || keys['KeyW']) && player.onGround){
-    player.vy = player.jump;
-    player.onGround = false;
-    playSynth({freq:880, type:'sine', dur:0.09, vol:0.06});
+  // dash
+  if ((keys['KeyE']) && state.dashCool <= 0 && !state.dashing){
+    state.dashing = true; state.dashTime = 18; state.dashCool = 80;
+    playBeep(800,'sawtooth',0.06,0.06);
   }
 
-  // gravity
-  player.vy += world.gravity * (dt*60);
+  if (state.dashing){
+    state.dashTime--;
+    state.vx = state.facing * 8;
+    if (state.dashTime <= 0) state.dashing = false;
+  } else {
+    if (state.dashCool > 0) state.dashCool--;
+  }
 
-  // apply
-  player.x += player.vx * (dt*60);
-  player.y += player.vy * (dt*60);
-
-  // bounds
-  if (player.x < 10) player.x = 10;
-  if (player.x + player.w > world.width - 10) player.x = world.width - 10 - player.w;
-  if (player.y > 1000) damagePlayer();
-
-  // platforms
-  player.onGround = false;
-  for (const p of world.platforms){
-    if (player.x + player.w > p.x && player.x < p.x + p.w){
-      if (player.y + player.h > p.y && player.y + player.h < p.y + p.h + 20 && player.vy >= 0){
-        player.y = p.y - player.h; player.vy = 0; player.onGround = true;
-      }
-    }
+  // jump
+  if ((keys['ArrowUp']||keys['KeyW']) && state.onGround){
+    state.vy = state.jumpPower * -1; state.onGround = false; state.canDoubleJump = true;
+    playBeep(820,'sine',0.09,0.06);
+    keys['ArrowUp'] = false; // small lock to prevent hold
+  } else if ((keys['ArrowUp']||keys['KeyW']) && !state.onGround && state.canDoubleJump){
+    // double jump
+    state.vy = state.jumpPower * -0.85; state.canDoubleJump = false;
+    playBeep(900,'triangle',0.08,0.06);
+    keys['ArrowUp'] = false;
   }
 
   // shooting
-  if ((keys['Space'] || keys['KeyK']) && player.cooldown <= 0){
-    playerShoot();
+  if ((keys['Space']||keys['KeyK']) && state.cooldown <= 0){
+    // spawn bullet
+    const dir = state.facing;
+    const b = { x: player.position.x + dir*12, y: player.position.y + 4, z: player.position.z, vx: dir*18, life: 80, mesh: null };
+    // visual bullet
+    const geom = new THREE.SphereGeometry(1.6,6,6);
+    const mat = new THREE.MeshStandardMaterial({ color:0xffffff, emissive:0xffffff });
+    const mb = new THREE.Mesh(geom, mat);
+    mb.position.set(b.x,b.y,b.z); scene.add(mb);
+    mb.castShadow = false;
+    b.mesh = mb;
+    bullets.push(b);
+    state.cooldown = 8;
+    playShootSfx();
   }
-  if (player.cooldown > 0) player.cooldown -= (dt*60);
+  if (state.cooldown > 0) state.cooldown--;
 
-  // bullets
+  // physics integrate
+  player.position.x += state.vx;
+  player.position.y -= state.vy; // y positive upward in scene coordinates: we'll invert
+  state.vy -= GRAV * (dt*60);
+
+  // ground collision
+  if (player.position.y <= 12){
+    player.position.y = 12;
+    state.vy = 0;
+    state.onGround = true;
+    state.canDoubleJump = true;
+  }
+
+  // platform collisions (simple AABB with platforms)
+  for (const p of platforms){
+    const px = p.position.x, py = p.position.y + 6, pw = p.geometry.parameters.width, ph = p.geometry.parameters.height;
+    // only collide when above platform and within x range
+    const left = px - pw/2, right = px + pw/2;
+    if (player.position.x > left - 6 && player.position.x < right + 6){
+      const platTop = p.position.y + (p.geometry.parameters.height/2) + 6;
+      if (player.position.y < platTop + 1 && player.position.y > platTop - 22 && state.vy < 0){
+        player.position.y = platTop + 1;
+        state.vy = 0;
+        state.onGround = true;
+        state.canDoubleJump = true;
+      }
+    }
+  }
+
+  // clamp player inside level
+  if (player.position.x < 10) player.position.x = 10;
+  if (player.position.x > WORLD_W - 20) player.position.x = WORLD_W - 20;
+
+  // update bullets
   for (let i=bullets.length-1;i>=0;i--){
     const b = bullets[i];
     b.x += b.vx * (dt*60);
-    if (b.x < cameraX - 120 || b.x > cameraX + canvas.clientWidth + 120){ bullets.splice(i,1); continue; }
-
-    if (b.fromPlayer){
-      for (let j=enemies.length-1;j>=0;j--){
-        const e = enemies[j];
-        if (overlapRect(b, e)){
-          e.hp -= 1; bullets.splice(i,1);
-          spawnBurst(e.x+e.w/2, e.y+e.h/2, 10, '#ff52e5');
-          if (e.hp <= 0){ enemies.splice(j,1); score += 120; scoreEl.textContent = 'Score: ' + score; }
-          break;
+    b.mesh.position.set(b.x, b.y, b.z);
+    b.life--;
+    if (b.life <= 0 || Math.abs(b.x - camera.position.x) > 2000){
+      scene.remove(b.mesh); bullets.splice(i,1); continue;
+    }
+    // check collision with enemies
+    for (let j=enemies.length-1;j>=0;j--){
+      const e = enemies[j];
+      const ex = e.mesh.position.x, ey = e.mesh.position.y;
+      if (Math.abs(b.x - ex) < 12 && Math.abs(b.y - ey) < 18){
+        // hit
+        e.hp -= 1;
+        scene.remove(b.mesh);
+        bullets.splice(i,1);
+        spawnDamageParticles(ex, ey, 10, 0xff6b95);
+        playHitSfx();
+        if (e.hp <= 0){
+          scene.remove(e.mesh);
+          enemies.splice(j,1);
+          score += 120;
+          document.getElementById('score').textContent = 'SCORE: ' + score;
+        }
+        break;
+      }
+    }
+    // boss hit
+    if (boss){
+      const bex = boss.mesh.position.x, bey = boss.mesh.position.y;
+      if (Math.abs(b.x - bex) < 40 && Math.abs(b.y - bey) < 50){
+        boss.hp -= 1;
+        scene.remove(b.mesh); bullets.splice(i,1);
+        spawnDamageParticles(bex, bey, 14, 0xff52e5);
+        playHitSfx();
+        if (boss.hp <= 0){
+          scene.remove(boss.mesh);
+          boss = null;
+          score += 1000;
+          document.getElementById('score').textContent = 'SCORE: ' + score;
         }
       }
-    } else {
-      if (overlapRect(b, player)){ bullets.splice(i,1); damagePlayer(); }
     }
   }
 
-  // enemies
+  // update enemies
   for (let i=enemies.length-1;i>=0;i--){
     const e = enemies[i];
-    e.x += e.vx * (dt*60);
-    if (e.type === 'shooter'){
-      e.cooldown -= (dt*60);
-      if (Math.abs(e.x - player.x) < 380 && e.cooldown <= 0){
-        e.cooldown = 80 + Math.random()*100;
-        bullets.push({ x: e.x, y: e.y + e.h/2, vx: (player.x < e.x ? -1 : 1) * 3.8, w:6, h:4, fromPlayer:false });
-        playSynth({freq:520, type:'sine', dur:0.06, vol:0.05});
-      }
+    e.mesh.position.x += e.vx * (dt*60);
+    e.cooldown -= (dt*60);
+    if (e.type === 'shooter' && e.cooldown <= 0){
+      e.cooldown = 80 + Math.random()*100;
+      // spawn enemy bullet
+      const eb = { x: e.mesh.position.x - 4, y: e.mesh.position.y + 2, vx: (player.position.x < e.mesh.position.x ? -1 : 1) * 6, mesh: null, life: 180 };
+      const g = new THREE.SphereGeometry(1.8,6,6);
+      const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color:0xff8a8a, emissive:0xff8a8a }));
+      m.position.set(eb.x, eb.y, eb.z||0); scene.add(m); eb.mesh = m;
+      eBullets.push(eb);
     }
-
-    if (overlapRect(e, player)){
-      spawnBurst(e.x+e.w/2, e.y+e.h/2, 14, '#7afcff');
-      enemies.splice(i,1);
+    // collision with player
+    if (Math.abs(e.mesh.position.x - player.position.x) < 10 && Math.abs(e.mesh.position.y - player.position.y) < 18){
+      // destroy enemy and damage player
+      spawnDamageParticles(e.mesh.position.x, e.mesh.position.y, 12, 0xff6b95);
+      scene.remove(e.mesh); enemies.splice(i,1);
       damagePlayer();
     }
-
-    if (e.x + e.w < cameraX - 140) enemies.splice(i,1);
+    if (e.mesh.position.x < camera.position.x - 400) { scene.remove(e.mesh); enemies.splice(i,1); }
   }
 
-  // spawn more ahead occasionally
-  const aheadX = cameraX + canvas.clientWidth + 240;
-  if (enemies.filter(en=>en.x > cameraX).length < 6){
-    const sx = Math.min(aheadX + Math.random()*400, world.width-140);
-    spawnEnemy(sx, Math.random()<0.6?'walker':'shooter');
+  // update enemy bullets
+  for (let i=eBullets.length-1;i>=0;i--){
+    const b = eBullets[i];
+    b.x += b.vx * (dt*60);
+    b.mesh.position.set(b.x, b.y, b.z||0);
+    b.life--;
+    if (b.life <= 0) { scene.remove(b.mesh); eBullets.splice(i,1); continue; }
+    if (Math.abs(b.x - player.position.x) < 8 && Math.abs(b.y - player.position.y) < 16){
+      scene.remove(b.mesh); eBullets.splice(i,1);
+      spawnDamageParticles(player.position.x, player.position.y, 12, 0xffd66b);
+      damagePlayer();
+    }
   }
 
-  // particles
+  // boss logic
+  if (boss){
+    boss.timer += dt*60;
+    boss.mesh.position.x += Math.sin(boss.timer*0.02)*0.6;
+    if (boss.timer % 120 < 1){
+      // fire pattern: spread bullets
+      for (let k=-3;k<=3;k++){
+        const bvx = (k/2) * 2 + ((player.position.x < boss.mesh.position.x) ? -1 : 1)* 2;
+        const bb = { x: boss.mesh.position.x - 10, y: boss.mesh.position.y - 5 + k*6, vx: bvx, mesh:null, life:220 };
+        const g = new THREE.SphereGeometry(2.5,6,6);
+        const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color:0xffb86b, emissive:0xffb86b }));
+        m.position.set(bb.x, bb.y, 0); scene.add(m); bb.mesh = m;
+        eBullets.push(bb);
+      }
+      playBeep(520,'sine',0.06,0.06);
+    }
+    // boss collision with player
+    if (Math.abs(boss.mesh.position.x - player.position.x) < 40 && Math.abs(boss.mesh.position.y - player.position.y) < 40){
+      damagePlayer();
+    }
+    // display boss health
+    document.getElementById('bossHealth').textContent = 'BOSS HP: ' + (boss ? Math.max(0,boss.hp) : '');
+  } else {
+    document.getElementById('bossHealth').textContent = '';
+  }
+
+  // particles update
   for (let i=particles.length-1;i>=0;i--){
     const p = particles[i];
-    p.x += p.vx; p.y += p.vy; p.vy += 0.12;
-    p.life -= 1; if (p.life <= 0) particles.splice(i,1);
+    p.x += p.vx; p.y += p.vy; p.vy -= 0.18;
+    p.life--; if (p.life <= 0){ scene.remove(p.mesh); particles.splice(i,1); continue; }
+    p.mesh.position.set(p.x, p.y, p.z);
+    const fade = Math.max(0.05, p.life/40); p.mesh.material.opacity = fade;
   }
 
-  // camera follow
-  const camTarget = Math.max(0, player.x - canvas.clientWidth/3);
-  cameraX += (camTarget - cameraX) * 0.12;
+  // remove off-world bullets/enemies
+  // spawn more enemies occasionally ahead
+  if (enemies.filter(e=>e.mesh.position.x > camera.position.x).length < 6){
+    const sx = camera.position.x + 600 + Math.random()*600;
+    if (sx < WORLD_W - 200) spawnEnemy(sx, 40, Math.random()<0.6?'walker':'shooter');
+  }
+
+  // camera update
+  updateCamera();
+
+  // check player fall out of world
+  if (player.position.y < -120){
+    damagePlayer();
+  }
+
+  // update UI
+  document.getElementById('score').textContent = 'SCORE: ' + score;
 }
 
-// ==== Player Shoot ====
-function playerShoot(){
-  player.cooldown = 12;
-  const dir = (keys['ArrowLeft']||keys['KeyA']) ? -1 : (keys['ArrowRight']||keys['KeyD']) ? 1 : player.facing;
-  const bx = player.x + player.w/2 + dir*18, by = player.y + player.h/2 - 4;
-  bullets.push({ x: bx, y: by, vx: 9*dir, w:8, h:4, fromPlayer:true });
-  playShoot();
-  // muzzle particle
-  for (let i=0;i<6;i++){
-    particles.push({ x: bx, y: by + (Math.random()*6-3), vx: (Math.random()*2-1)*1.8 + dir*1.4, vy: Math.random()*-1.5, life: 12 + Math.random()*10, color: '#ffd66b', size: 2 + Math.random()*2 });
+// spawn small damage particles
+function spawnDamageParticles(x,y,count,color=0xffb86b){
+  for (let i=0;i<count;i++){
+    const geom = new THREE.BoxGeometry(1.6,1.6,1.6);
+    const mat = new THREE.MeshBasicMaterial({ color });
+    const m = new THREE.Mesh(geom, mat); m.position.set(x + (Math.random()*10-5), y + (Math.random()*10-5), Math.random()*10-5);
+    scene.add(m);
+    particles.push({ mesh:m, x:m.position.x, y:m.position.y, z:m.position.z, vx:(Math.random()*2-1)*2, vy: (Math.random()*2-1)*2, life: 18 + Math.random()*18 });
   }
+  playExplosionSfx();
 }
 
-// ==== Render ====
-function render(){
-  // clear and background gradient
-  const W = canvas.clientWidth, H = canvas.clientHeight;
-  ctx.clearRect(0,0,W,H);
-  const g = ctx.createLinearGradient(0,0,0,H);
-  g.addColorStop(0,'#020617'); g.addColorStop(1,'#03081a');
-  ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
-
-  // parallax neon shapes
-  ctx.save();
-  ctx.translate(-cameraX*0.08, 0);
-  for (let i=0;i<6;i++){
-    ctx.fillStyle = `rgba(122,252,255,${0.02 + i*0.01})`;
-    ctx.beginPath();
-    ctx.ellipse(200 + i*420, 90 + (i%2)*20, 260, 60, 0, 0, Math.PI*2);
-    ctx.fill();
-  }
-  ctx.restore();
-
-  // faint grid
-  ctx.save();
-  ctx.globalAlpha = 0.06;
-  ctx.strokeStyle = '#0f2b40';
-  ctx.lineWidth = 1;
-  for (let x = - (cameraX % 40); x < W; x += 40){
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
-  }
-  ctx.restore();
-
-  // translate to world
-  ctx.save(); ctx.translate(-cameraX, 0);
-
-  // platforms
-  for (const p of world.platforms){
-    // neon platform body
-    const glow = ctx.createLinearGradient(p.x, p.y, p.x + p.w, p.y + 24);
-    glow.addColorStop(0, 'rgba(255,82,229,0.06)'); glow.addColorStop(0.5,'rgba(122,252,255,0.04)'); glow.addColorStop(1,'rgba(155,255,122,0.03)');
-    ctx.fillStyle = glow; ctx.fillRect(p.x - 2, p.y - 6, p.w + 4, p.h + 8);
-    // top strip
-    ctx.fillStyle = '#091025'; ctx.fillRect(p.x, p.y, p.w, p.h);
-    ctx.fillStyle = '#11314a'; ctx.fillRect(p.x, p.y, p.w, 4);
-    // neon edge
-    ctx.fillStyle = 'rgba(122,252,255,0.06)'; ctx.fillRect(p.x, p.y - 6, p.w, 2);
-  }
-
-  // world marker
-  ctx.fillStyle = 'rgba(255,255,255,0.02)'; ctx.fillRect(world.width-6, 0, 6, H);
-
-  // bullets
-  for (const b of bullets){
-    ctx.fillStyle = b.fromPlayer ? '#fff' : '#ff8a8a';
-    roundRect(ctx, b.x - 2, b.y - 2, b.w, b.h, 3, true);
-    // glow
-    ctx.globalAlpha = 0.12;
-    ctx.fillStyle = b.fromPlayer ? '#7afcff' : '#ff5aa8';
-    ctx.fillRect(b.x - 6, b.y - 6, b.w + 12, b.h + 12);
-    ctx.globalAlpha = 1;
-  }
-
-  // enemies
-  for (const e of enemies){
-    const bob = Math.sin((e.x + performance.now()*0.002)/80) * 3;
-    ctx.save(); ctx.translate(0, bob);
-    // body neon block
-    roundRect(ctx, e.x, e.y, e.w, e.h, 6, true);
-    ctx.fillStyle = (e.type==='shooter') ? '#9bff7a' : '#ff52e5';
-    ctx.fill();
-    // inner dark panel
-    ctx.fillStyle = '#071018'; ctx.fillRect(e.x + 6, e.y + 8, e.w - 12, e.h - 12);
-    // eye
-    ctx.fillStyle = '#0ff'; ctx.fillRect(e.x + e.w/2 - 3, e.y + 8, 6, 6);
-    ctx.restore();
-  }
-
-  // player procedural sprite (smooth frames)
-  drawPlayer(player.x, player.y, player.w, player.h, player.facing);
-
-  // particles
-  for (const p of particles){
-    ctx.fillStyle = p.color;
-    ctx.fillRect(p.x - cameraX, p.y, p.size, p.size);
-  }
-
-  ctx.restore(); // end world
-
-  // HUD text (screen-space)
-  ctx.fillStyle = '#eaffff';
-  ctx.font = '14px monospace';
-  ctx.fillText('Score: ' + score, 12, 22);
-  ctx.fillText('Lives: ' + lives, 12, 42);
-
-  if (!running){
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.fillRect(0,0,W,H);
-    ctx.fillStyle = '#fff';
-    ctx.textAlign = 'center';
-    ctx.font = '32px monospace';
-    ctx.fillText('GAME OVER', W/2, H/2 - 8);
-    ctx.font = '14px monospace';
-    ctx.fillText('Press R or touch RESTART to play again', W/2, H/2 + 20);
-    ctx.textAlign = 'start';
+// damage player
+function damagePlayer(){
+  lives -= 1; document.getElementById('lives').textContent = 'LIVES: ' + lives;
+  spawnDamageParticles(player.position.x, player.position.y, 20, 0xffd66b);
+  playHitSfx();
+  if (lives <= 0){
+    running = false; showMessage('GAME OVER — Press R to restart');
+  } else {
+    // respawn slightly behind camera
+    player.position.x = Math.max(40, camera.position.x - 120);
+    player.position.y = 60;
+    state.vx = 0; state.vy = 0;
   }
 }
 
-// helper: rounded rect
-function roundRect(ctx, x, y, w, h, r, fillFlag){
-  ctx.beginPath(); ctx.moveTo(x+r, y);
-  ctx.arcTo(x+w, y, x+w, y+h, r);
-  ctx.arcTo(x+w, y+h, x, y+h, r);
-  ctx.arcTo(x, y+h, x, y, r);
-  ctx.arcTo(x, y, x+w, y, r); ctx.closePath();
-  if (fillFlag) ctx.fill();
+// ----------------- Render loop -----------------
+let running = true;
+let prevTime = performance.now();
+function animate(){
+  const now = performance.now();
+  const dt = Math.min(0.033, (now - prevTime)/1000);
+  prevTime = now;
+  if (running){ update(dt); }
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+animate();
+
+// ----------------- Helper: show center message -----------------
+function showMessage(txt){
+  const m = document.getElementById('message');
+  m.style.display = txt ? 'block' : 'none';
+  m.innerText = txt || '';
 }
 
-// procedural player drawing with simple run/jump frames
-function drawPlayer(x,y,w,h,dir){
-  // frame calc
-  player.anim += 0.18 + Math.abs(player.vx)*0.02;
-  player.frame = Math.floor(player.anim) % 6;
+// ----------------- Player initial pos setup -----------------
+player.position.set(60, 40, 0);
 
-  // colors
-  const bodyCol = '#ffd66b';
-  const accent = '#7afcff';
-  // body shadow
-  ctx.fillStyle = 'rgba(0,0,0,0.12)'; ctx.fillRect(x+2, y+h-4, w-4, 4);
-  // torso
-  ctx.fillStyle = bodyCol; roundRect(ctx, x, y, w, h, 6, true);
-  // helmet
-  roundRect(ctx, x+6, y-10, w-12, 14, 6, true);
-  ctx.fillStyle = '#ffb86b'; ctx.fill();
-
-  // legs animation (simple)
-  ctx.fillStyle = '#0a0f16';
-  const legSpread = (player.frame % 2 === 0) ? 6 : -6;
-  ctx.fillRect(x + (dir>0 ? 6 : w-12) , y + h - 6, 6, 6);
-  ctx.fillRect(x + (dir>0 ? w-12 : 6) , y + h - 6, 6, 6);
-
-  // visor neon
-  ctx.fillStyle = accent; ctx.fillRect(x + 8, y - 6, w - 16, 6);
-
-  // gun (facing dir)
-  const gx = x + (dir>0 ? w - 4 : -10);
-  const gy = y + h/2 - 6;
-  ctx.fillStyle = '#091018'; ctx.fillRect(gx, gy, 12, 6);
-  // muzzle glow if shooting
-  if (player.cooldown > 9){
-    ctx.fillStyle = '#ffd9a3'; ctx.fillRect(gx + (dir>0 ? 12 : -8), gy - 2, 8, 10);
-  }
+// ----------------- Controls: keyboard actions for testing -----------------
+function restart(){
+  // cleanup
+  enemies.forEach(e=>scene.remove(e.mesh)); enemies.length = 0;
+  bullets.forEach(b=>scene.remove(b.mesh)); bullets.length = 0;
+  eBullets.forEach(b=>scene.remove(b.mesh)); eBullets.length = 0;
+  particles.forEach(p=>scene.remove(p.mesh)); particles.length = 0;
+  if (boss) scene.remove(boss.mesh); boss = null;
+  // reset state
+  player.position.set(60, 40, 0);
+  state.vx = 0; state.vy = 0; state.onGround = true; state.canDoubleJump = true; state.cooldown = 0; state.dashCool = 0;
+  score = 0; lives = 3;
+  document.getElementById('score').textContent = 'SCORE: ' + score;
+  document.getElementById('lives').textContent = 'LIVES: ' + lives;
+  // spawn enemies and boss
+  for(let i=0;i<6;i++) spawnEnemy(360 + i*220, 40, Math.random()<0.6 ? 'walker' : 'shooter');
+  spawnBoss();
+  running = true; showMessage('');
 }
+window.restart = restart;
 
-// overlap rect
-function overlapRect(a,b){ return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
+// mute toggle
+function toggleMute(){ muted = !muted; if (!muted){ ensureAudio(); } }
+window.toggleMute = toggleMute;
 
-// ==== Resume audio on first user interaction ====
-window.addEventListener('pointerdown', function initAudioOnce(){
-  ensureAudio();
-  if (audioCtx.state === 'suspended') audioCtx.resume();
-  startAmbient();
-  window.removeEventListener('pointerdown', initAudioOnce);
+// resume audio on first gesture
+window.addEventListener('pointerdown', function initAudio(){
+  ensureAudio(); window.removeEventListener('pointerdown', initAudio);
 });
 
-// ==== Start loop ====
-requestAnimationFrame(function step(ts){
-  last = performance.now();
-  requestAnimationFrame(loop);
-});
+// show initial instructions
+showMessage('3D Prototype: Play with keyboard or touch. Press R to restart.');
 
-// ==== Keyboard shortcuts for cheat/testing (optional) ====
-document.addEventListener('keydown', (e)=>{
-  if (e.key === 'g') { score += 500; scoreEl.textContent = 'Score: ' + score; }
-});
+// ----------------- Notes for upgrade (readable in code) -----------------
+/*
+  NEXT STEPS (I can do for you):
+  - Replace player/enemy boxes with proper GLTF characters (drop a .gltf/.glb and I will integrate)
+  - Add proper sprite/animation blending (walk/run/jump/shoot) — needs model with animation clips
+  - Replace WebAudio FX with high-quality WAV/OGG SFX (you can upload)
+  - Add level progression, checkpoints, multiple levels, and true Hard Corps boss phases
+  - Optimize and add post-processing (bloom, film grain) for neon effect
+*/
 
-// ==== End of script ====
+// End of module
 </script>
 </body>
 </html>
